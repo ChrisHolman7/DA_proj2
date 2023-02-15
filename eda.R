@@ -1,276 +1,441 @@
-# plan
-# remove 13 rows that cameron removed in file
-# look over 50-98
-# check for map vs normal and get idea of ones that seem useful
-# for cat vars check differecne in means
-# for cont vars try looking for another var to behave as y
-#   maybe the hist could have something? (bi modal)
-#check proportions of indicator?
-# google unsupervised exa
 
+load("~/school/Spring2023/Stat4911/osuAdvcProj/subset_adv_ltg_environment.RData")
 
-#data subsets
-#adv_sub - subset from metzger
-#sub2 - changing 'null' to NA
-#sub3 - removed columns with no use
-#sub4 - my subset of data (50-98) 
-
-#class subset
-#load('C:/Users/chris/OneDrive/Desktop/Capstone/OOA_Proj/subset_adv_environment.RData')
-
-#new subset
-#load('C:/Users/chris/OneDrive/Desktop/Capstone/OOA_Proj/subset_adv_ltg_environment.RData')
+library(tidyverse)
+library(mice)
 
 adv_sub = adv_sub_ltg
+rm(adv_sub_ltg)
 
-#libraries
-library(mice)
-library(dplyr)
-library(ggplot2)
-library(ggcorrplot)
-
-#assessed home value
-
-#just converts "null" to NA
-nullToNA <- function(dataName){
-  return(replace(dataName, dataName=='null',NA)) 
+nullToNA = function(dataName) {
+  return(replace(dataName, dataName=='null', NA))
 }
-
-#turns numbers as strings into numbers
-factorize <- function(dataName){
-  return(as.numeric(as.character(dataName))) 
-}
-
-#does both 
-nullAndFactor <- function(dataName){
-  temp <- nullToNA(dataName)
-  return(factorize(temp))
-}
-
-
-sum(adv_sub$val_score_philanthropic_score_map == 'null')
-adv_sub$val_score_philanthropic_score_bin = strtoi(substr(adv_sub$val_score_philanthropic_score_map, 0,1))
-
-
-#lots of people dont wanna donate
-#or at least
-hist(nullToNA(adv_sub$val_score_philanthropic_score_bin))
 
 sub2 = adv_sub
-for (i in 1:ncol(adv_sub)){
-  if (is.character(adv_sub[,i])){
+for (i in 1:ncol(adv_sub)) {
+  if (is.character(adv_sub[,i]))
     sub2[,i] = nullToNA(adv_sub[,i])
-  }
-}
-(colMeans(is.na(sub2)))
-
-
-sub3 <- sub2 %>% select(-c('Not_in_use',"TAS_ID",
-                           "UniqueID", "SubmitDate", "Source", "_rescued_data", "HomeAddressStreet1",
-                           "HomeAddressStreet2", "HomeAddressSystemID", "FirstName", "MiddleName", 
-                           "LastName", "HomeCity"))
-
-
-
-
-##TESTING VARS 50-98
-##LOOKING FOR VARS THAT HAVE SEPARATION B/W CATEGORIES OR ACROSS DISTRIBUTION
-
-
-tester = function(data, title = 'data'){
-  data = factorize(data)
-  hist(data, main = c('Histogram of',title))
 }
 
-##FIRST APPROACH
-#RESULTS:
-#political persona seems to have differing freqs (maybe could be good)
-#   but needs cleaned (00,01,02 dont match rest of 03-10)
-#amt_ta_spending vars could encode very similar info
-#   look into this
 
 
-#numbers were originally chars
-sub3$ind_purchase_dm_multi_buyer = factorize(sub3$ind_purchase_dm_multi_buyer)
 
-hist(sub3$ind_purchase_dm_multi_buyer)
 
-#numbers were originally chars
-sub3$n_purchase_mail_upscale_buyer = factorize(sub3$n_purchase_mail_upscale_buyer)
+# Test 
 
-hist(sub3$n_purchase_mail_upscale_buyer)
+subRelRmv = sub2 %>% select(-"Not_in_use")
+nNames = names(subRelRmv %>% select(starts_with("n")))
+catNames = names(subRelRmv %>% select(starts_with("cat")))
+valNames = names(subRelRmv %>% select(starts_with("val") & !ends_with("map")))
+mapNames = names(subRelRmv %>% select(ends_with("map")))
+amtNames = names(subRelRmv %>% select(starts_with("amt")))
+indNames = names(subRelRmv %>% select(starts_with("ind")))
+pctNames = names(subRelRmv %>% select(starts_with("p")))
 
-#seems polical persona has differing freqs along cats
-#needs cleaned (00,01,02 do not fit rest of data as political spectrum)
-sub3$cat_calc_political_persona = factorize(sub3$cat_calc_political_persona)
+names(subRelRmv[!(names(subRelRmv) %in% 
+                    c(nNames, catNames, valNames, amtNames, indNames, pctNames, mapNames))])
 
-hist(sub3$cat_calc_political_persona)
 
+subRelRmv = subRelRmv %>% mutate_at(c(nNames,valNames, amtNames, pctNames), 
+                                    as.numeric)
+subRelRmv = subRelRmv %>% mutate_at(c(catNames, mapNames, indNames,
+                                      "HomeState", "HomePostCode"), as.factor)
 
-tester(sub3$cat_calc_social_score, 'social score')
+subRelRmv = subRelRmv %>% select(-c("TAS_ID",
+                                    "UniqueID", "SubmitDate", "Source", "_rescued_data", "HomeAddressStreet1",
+                                    "HomeAddressStreet2", "HomeAddressSystemID", "FirstName", "MiddleName", 
+                                    "LastName", "HomeCity"))
 
-tester(sub3$amt_pop_per_capita_income,'percap income')
 
-#making these prettier^
-hist(factorize(sub3$cat_calc_social_score),main='Histogram of Social Score', xlab='Social Score (higher = more presence on social media)')
-hist(factorize(sub3$n_purchase_mail_upscale_buyer),main='Histogram of Upscale Mail Purchases', xlab='Number of Purchases')
+subRelRmv$HomePostCode = as.character(subRelRmv$HomePostCode)
 
-#relationship b/w area percap income and philantropy (strong relationship)
-sub3$amt_ta_discretionaryspending_philanthropy = factorize(sub3$amt_ta_discretionaryspending_philanthropy)
-sub3$amt_pop_per_capita_income = factorize(sub3$amt_pop_per_capita_income)
-ggplot(sub3, aes(x=amt_pop_per_capita_income, y=amt_ta_discretionaryspending_philanthropy))+
-  stat_summary_bin(fun='mean', geom='bar', bins=20) + xlab("Per Capita Income ($)")+
-  ylab("Philanthropic Spending ($)") + ggtitle("Philanthropic spending vs Per Capita Income")
 
 
-#adding col105 (philantropic score from blackbaud to use as pseudo dependent var)
-sub4 = sub3[,c(50:98,105)]
-#str(sub4)
-char_cols = sapply(sub4,is.character)
-char_cols[c('cat_ta_total_identified_assets','cat_demo_political_affiliation')] = FALSE
-sub4[,char_cols] = as.data.frame(apply(sub4[,char_cols],2,as.numeric))
-#str(sub4)
+subRelRmv$HomePostCode = substr(subRelRmv$HomePostCode,1,
+                                nchar(subRelRmv$HomePostCode)-5)
 
-#now sub4 is all fixed up (null to na and chars to num)
+subRelRmv$HomePostCode = as.factor(subRelRmv$HomePostCode)
+subRelRmv$val_pop_family_income_cbsa_decile = 
+  as.factor(subRelRmv$val_pop_family_income_cbsa_decile)
 
-#new movers vs !new movers have similar ta_income
-hist(sub4$ind_life_new_mover_12mos)
+length(unique(subRelRmv$HomePostCode))
 
-par(mfrow=c(1,2))
-options(scipen=999)
-hist(sub4[sub4$ind_life_new_mover_12mos == 1,]$val_score_philanthropic_score)
-hist(sub4[sub4$ind_life_new_mover_12mos == 0,]$val_score_philanthropic_score)
 
-sub4_cor = na.omit(sub4[,14:30])
-corData = cor(sub4_cor)
+hist(as.numeric(as.character((subRelRmv$cat_demo_date_of_birth[as.numeric(as.character(subRelRmv$cat_demo_date_of_birth)) > 190000]))))
 
-ggcorrplot(corData,title="TA Spending Categories")
+# -------------------------------------------------------------------------
+# Looking at subset of variables for distribution and ideas of use
 
-# md.pattern(sub2[c(1:3),c(1:10)], rotate.names = TRUE)
+myCut = subRelRmv[99:ncol(subRelRmv)]
 
-plot(sub4$amt_ta_income[sub4$amt_ta_income>1000000], sub4$amt_ta_discretionaryspending_philanthropy[sub4$amt_ta_income>1000000])
+names(myCut)
 
- colmeans = sort(colMeans(is.na(sub4)))
- colmeans
 
-#tester(sub4$cat_demo_political_affiliation, 'test')
 
-barplot(prop.table(table(sub4$cat_demo_political_affiliation)))
+sum(is.na(myCut$amt_pop_per_capita_income))/nrow(myCut) # 0.1% NAs!
+hist(log(myCut$amt_pop_per_capita_income)) # wants log transform
+# Probably a good index of general income -- could be correlated with location
 
+hist(myCut$val_pop_ispsa_index) 
+sum(is.na(myCut$val_pop_ispsa_index))/nrow(myCut) # 0.1%
+# General indicator of status 
 
-tester(sub4$val_donor_private_foundation, 'private dno')
 
-  tester(sub4$val_donor_education_charities, 'edu charities')
+hist(myCut$val_pop_family_income_state_decile) 
+sum(is.na(myCut$val_pop_family_income_state_decile))/nrow(myCut) # 0.1%
+# Another indicator of income -- is relative income (i.e. decile per state 
+# more important), or absolute. 
+# -- Could use this mostly and fill in NAs
+# somehow by combining with amt_pop_per_capita_income
+# -- Should this be kept as numeric or factor? Obviously it wouldn't make sense
+# to give decimal deciles, but we want to maintain order
 
-tester(sub4$ind_life_new_mover_12mos, 'newmover12')
+hist(myCut$val_pop_family_income_cbsa_decile)
+sum(is.na(myCut$val_pop_family_income_cbsa_decile))/nrow(myCut) # 0.1%
+# Very similar to previous -- probably only want to include one
+# State is possibly a little more skewed left
 
-tester(sub4$ind_life_new_homeowner_12mos,'newhome12')
+hist(log(myCut$val_pop_home_value_state_index))
+sum(is.na(myCut$val_pop_home_value_state_index))/nrow(myCut) # 0.1%
+# Log transform helpful
+# Could be good indicator of wealth via house
+# -- worth noting this is specify the house they live in, not rentals
 
-tester(sub4$cat_demo_dual_income, 'dual income')
+hist(log(myCut$val_pop_home_value_cbsa_index))
+sum(is.na(myCut$val_pop_family_income_cbsa_decile))/nrow(myCut) # 0.1%
+# Very similar as state, just slightly less spread. Probably only need one 
+# again, might favor state just for more spread
 
-tester(sub4$ind_purchase_dm_multi_buyer,'multi buyer')
+hist(myCut$val_score_philanthropic_score)
+sum(is.na(myCut$val_score_philanthropic_score))/nrow(myCut) # 0.01%
+# Is a general estimate of likelihood to donate. Would be good to know how
+# this corresponds with actual donations
 
-tester(sub4$n_purchase_mail_upscale_buyer, 'upscale mail')
+barplot(table(myCut$cat_score_donor_persona), main="Cat Score Donor Persona")
+sum(is.na(myCut$cat_score_donor_persona))/nrow(myCut) # 4%
 
-tester(sub4$cat_calc_political_persona, 'politics')
+par(mar=c(10,6,4,1))
+barplot(table(myCut$cat_score_donor_persona_map), 
+        main="Cat Score Donor Persona Map", las=2)
+sum(is.na(myCut$cat_score_donor_persona_map))/nrow(myCut) # 4%
+# This is literally the same as the non-map version just with different words
+# since both are categories. Definitely only keep one. Question is if we keep
+# map, should we cut the number? I don't see why not
+
+barplot(table(myCut$cat_score_direct_marketing_ask_array), las=2)
+sum(is.na(myCut$cat_score_direct_marketing_ask_array))/nrow(myCut) # 0.01%
+# Uhh, it's the "suggested ask amount"? What the heck does that mean. Where
+# does it come from? Seems kinda horrible
+
+hist(myCut$val_score_direct_marketing_score)
+sum(is.na(myCut$val_score_direct_marketing_score))/nrow(myCut) # 0.01%
+# Likelihood to make direct marketing gift. Do we want to use their own 
+# likelihood predictions?
+
+par(mar=c(12,6,4,1))
+barplot(table(myCut$val_score_direct_marketing_score_map)/c(1,1,1,2,5),
+        las=2, main="Direct Marketing Score")
+sum(is.na(myCut$val_score_direct_marketing_score_map))/nrow(myCut) # 0.01%
+# Vast majority are just average or below average, even when adjusted for 
+# range of categories. I feel like this makes it worse than the non-map version
+
+
+hist(myCut$val_score_telemarketing_score)
+sum(is.na(myCut$val_score_telemarketing_score))/nrow(myCut) # 0.01%
+# Center is much lower with more right skew -- most likelihood because 
+# people are just generally unlikely to answer telemarketing calls. 
+# -- Maybe check how this tracks with age -- I can't imagine many young people
+# have a good score. 
+# -- In general I can't imagine it would be great by itself, but it could
+# be added to a general "likelihood to respond" score
+
+par(mar=c(12,6,4,1))
+barplot(table(myCut$val_score_telemarketing_score_map)/c(1,1,1,2,5),
+        las=2, main="TeleMarketing Score")
+sum(is.na(myCut$val_score_telemarketing_score_map))/nrow(myCut) # 0.01%
+# Vast majority are just average or below average, even when adjusted for 
+# range of categories. I feel like this makes it worse than the non-map version
+
+hist(myCut$val_score_online_score)
+sum(is.na(myCut$val_score_online_score))/nrow(myCut) # 0.01%
+# Much more uniform aside from very high scores
+
+barplot(table(myCut$val_score_online_score_map)/c(1,1,1,2,5),
+        las=2, main="Online Score")
+sum(is.na(myCut$val_score_telemarketing_score_map))/nrow(myCut) # 0.01%
+# Below average --> good similar, trails off for very good and excellent
+
+
+hist(myCut$val_score_sustainer_score)
+sum(is.na(myCut$val_score_sustainer_score))/nrow(myCut) # 0.01%
+# More skewed right again, similar to telemarketing score. 
+# Predicted likelihood of becoming a sustainer donor, so could be useful if
+# it's good at that, but how do we know?
+
+barplot(table(myCut$val_score_sustainer_score_map)/c(1,1,1,2,5),
+        las=2, main="Sustainer Score")
+sum(is.na(myCut$val_score_sustainer_score_map))/nrow(myCut) # 0.01%
+# Vast majority in below average, skewed
 
-tester(sub4$val_life_grandchildren, 'grandchildren')
 
-#IND PURCHASE DM MULTI BUYER
-sub4$ind_purchase_dm_multi_buyer_bin = strtoi(substr(sub4$ind_purchase_dm_multi_buyer,0,1))
-sub4 %>% group_by(sub4$ind_purchase_dm_multi_buyer_bin<1) %>% summarize(Percen=n()/nrow(.))
+hist(myCut$val_score_giving_tuesday_score)
+sum(is.na(myCut$val_score_giving_tuesday_score))/nrow(myCut) # 0.01%
+# Nothing special
 
-#figuring out grandchildren proportions (split at 50)
-sub4$val_life_grandchildren_bin = strtoi(substr(sub4$val_life_grandchildren,0,1)) 
-sub4 %>% group_by(sub4$val_life_grandchildren_bin<=5) %>% summarize(Percen=n()/nrow(.))
-# deno = sum(temp[0:9,]$Percen)
+barplot(table(myCut$val_score_giving_tuesday_score_map)/c(1,1,1,2,5),
+        las=2, main="Giving Tuesday Score")
+sum(is.na(myCut$val_score_telemarketing_score_map))/nrow(myCut) # 0.01%
+# Nothing Special
+
+
+hist(myCut$val_score_end_of_year_score)
+sum(is.na(myCut$val_score_end_of_year_score))/nrow(myCut) # 0.01%
+# Nothing special
 
-# temp$Percen / deno
+barplot(table(myCut$val_score_end_of_year_score_map)/c(1,1,1,2,5),
+        las=2, main="End of Year Score")
+sum(is.na(myCut$val_score_end_of_year_score_map))/nrow(myCut) # 0.01%
+# Nothing Special
 
 
-sub4 %>% group_by(sub4$val_donor_private_foundation <95) %>% summarize(Percen=n()/nrow(.))
+# Many of the previous (and maybe next depending on what p2p means) vars
+# have potential to be combined into general propoensity to give score
 
 
-#PRIVATE FOUNDATION
-sub4$val_donor_private_foundation_bin = strtoi(substr(sub4$val_donor_private_foundation,0,1))
-sub4 %>% group_by(sub4$val_donor_private_foundation_bin<5) %>% summarize(Percen=n()/nrow(.))
+hist(myCut$val_score_p2p_event_score)
+sum(is.na(myCut$val_score_p2p_event_score))/nrow(myCut) # 0.01%
+# Nothing special
+# p2p organization driven event participation
 
+barplot(table(myCut$val_score_p2p_event_score_map)/c(1,1,1,2,5),
+        las=2, main="P2P Event Score")
+sum(is.na(myCut$val_score_p2p_event_score_map))/nrow(myCut) # 0.01%
+# Nothing Special
 
-#EDUCATION CHARITIES
-sub4$val_donor_education_charities_bin = strtoi(substr(sub4$val_donor_education_charities,0,1))
-sub4 %>% group_by(sub4$val_donor_education_charities_bin<5) %>% summarize(Percen=n()/nrow(.))
 
-#NEW MOVER 12 MOS
-sub4$ind_life_new_mover_12mos_bin = strtoi(substr(sub4$ind_life_new_mover_12mos,0,1))
-sub4 %>% group_by(sub4$ind_life_new_mover_12mos_bin<1) %>% summarize(Percen=n()/nrow(.))
+hist(myCut$val_score_p2p_diy_score)
+sum(is.na(myCut$val_score_p2p_diy_score))/nrow(myCut) # 0.01%
+# Much higher peak (500 rather than 200) and much more normal
+# p2p **individual** driven event 
+# -- Could indicate people who are more driven to donate on their own vs.
+# event showing people who donate when they have to for work
 
+barplot(table(myCut$val_score_p2p_diy_score_map)/c(1,1,1,2,5),
+        las=2, main="P2P Individual Score")
+sum(is.na(myCut$val_score_p2p_diy_score_map))/nrow(myCut) # 0.01%
+# Most in average, good/below average very similar
 
-#NEW HOMEOWNER 12 MOS
-sub4$ind_life_new_homeowner_12mos_bin = strtoi(substr(sub4$ind_life_new_homeowner_12mos,0,1))
-sub4 %>% group_by(sub4$ind_life_new_homeowner_12mos_bin<1) %>% summarize(Percen=n()/nrow(.))
 
-#POLITICAL AFFLIATION
-sub4 %>% group_by(sub4$cat_demo_political_affiliation) %>% summarize(Percen=n()/nrow(.))
+barplot(table(myCut$cat_score_p2p_persona), las=2, main="P2P Persona")
+sum(is.na(myCut$cat_score_p2p_persona))/nrow(myCut) # 0.01%
+# Even-ish distribution
 
-#TOTAL ASSETS
-sub4 %>% group_by(sub4$cat_ta_total_identified_assets) %>% summarize(Percen=n()/nrow(.))
+barplot(table(myCut$cat_score_p2p_persona_map),
+        las=2, main="P2P Persona")
+sum(is.na(myCut$cat_score_p2p_persona_map))/nrow(myCut) # 0.01%
+# Like donor persona, they're the same variable just with different category
+# names. Pick one, if either
 
-#higher education
-boxplot(sub4[,36:40], las=0, horizontal = TRUE)
 
-#education
-boxplot(sub4[,41:45], las=0, horizontal = TRUE)
+barplot(table(myCut$cat_demo_gender_map),
+        las=2, main="Gender")
+sum(is.na(myCut$cat_demo_gender_map))/nrow(myCut) # 40%
+# Gonna be the exact same as gender, so only need one. 40% NAs is very high,
+# what can we do about that? 
 
-options(scipen=5)
-ggplot(sub4, aes(x=amt_ta_networth)) + geom_histogram(binwidth=1000000, colour="black", fill="white")
 
-#investments
-# boxplot(sub4[,23:24], horizontal = TRUE)
-# boxplot(sub4[,25:26], horizontal = TRUE)
+barplot(table(myCut$cat_demo_marital_status_map),
+        las=2, main="Marital Status")
+sum(is.na(myCut$cat_demo_marital_status_map))/nrow(myCut) # 40%
+# Same as marital status. Notably very few single people, but a decent amount
+# unknown and still 40% NA
 
 
+# Cut
+barplot(table(myCut$cat_demo_person_type_map),
+        las=2, main="Person Type")
+sum(is.na(myCut$cat_demo_person_type_map))/nrow(myCut) # 40%
+# Same as person type, only 4 of 7 cats used, 40% NA, almost all answers 
+# primary decision maker, second most other/blank, and what is ranked basically
+# just gives young vs middle aged vs elderly --- don't think either person type
+# var will be helpful
 
 
+barplot(table(myCut$cat_demo_dwelling_size_map),
+        las=2, main="Dwelling Size")
+sum(is.na(myCut$cat_demo_dwelling_size_map))/nrow(myCut) # 45%
+# Basically all data is from single family detached unit (94% after NAs)
+# Don't think it will be useful
 
-##PCA
-#on finance
-library(factoextra)
-finance_pca = prcomp(na.omit(sub4[,23:30]), scale =TRUE)
-fviz_eig(finance_pca)
 
-fviz_pca_var(finance_pca,
-             col.var = "contrib", # Color by contributions to the PC
-             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
-             repel = TRUE     # Avoid text overlapping
-)
+barplot(table(myCut$cat_financial_mortgage_remainder_amount_map),
+        las=2, main="Mortgage Remainder")
+sum(is.na(myCut$cat_financial_mortgage_remainder_amount_map))/nrow(myCut) # 50%
+# Good distribution, but half NA is bad. Will be same as non-map
 
-finance_pca$rotation
-#checking seems least impactful (not by much, no major finding)
 
-#on population dist
-pop_pca = prcomp(na.omit(sub4[,36:49]), scale =TRUE)
-#took more PC to explain substantial variance
-fviz_eig(pop_pca)
+# Cut
+barplot(table(myCut$cat_financial_estimated_income_range_map),
+        las=2, main="Estimated Income")
+sum(is.na(myCut$cat_financial_estimated_income_range_map))/nrow(myCut) # 31%
+# Good distribution, but 31% NA is bad. Will be same as non-map. As always, 
+# estimated could be an issue
 
-fviz_pca_var(pop_pca,
-             col.var = "contrib", # Color by contributions to the PC
-             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
-             repel = TRUE     # Avoid text overlapping
-)
 
-pop_pca$rotation
-#kindergarten has lower contribution than the rest, maybe remove
+barplot(table(myCut$cat_demo_occupation_map),
+        las=2, main="Occupation")
+sum(is.na(myCut$cat_demo_occupation_map))/nrow(myCut) # 31%
+# Almost everybody is unknown on top of the NAs. Consider how we could re-group
+# these, otherwise probably not worth using
 
-par(mfrow=c(1,1))
 
+barplot(table(myCut$cat_demo_education_map),
+        las=2, main="Education")
+sum(is.na(myCut$cat_demo_education_map))/nrow(myCut) # 31%
+# High NA but good variance
 
-##ADDING LTG TO SUB$
-sub4$amt_lifetime_giving = adv_sub$amt_lifetime_giving
 
-sum(complete.cases(sub4))
+barplot(table(myCut$cat_calc_political_persona_map),
+        las=2, main="Politics")
+sum(is.na(myCut$cat_calc_political_persona_map))/nrow(myCut) # 42%
+# Okay apart from NAs. Again, this is just predicted
 
 
-sub4_ltg_cor = na.omit(sub4)
+barplot(table(myCut$cat_calc_social_score_map),
+        las=2, main="Social Score")
+sum(is.na(myCut$cat_calc_social_score_map))/nrow(myCut) # 50%
+# Okay apart from NAs. Again, this is just predicted. Also, I wouldn't think 
+# it matters much apart from correlation with age
 
-ltg_cor4 = cor(sub4)
+
+barplot(table(myCut$cat_demo_dual_income_map),
+        las=2, main="Dual Income")
+sum(is.na(myCut$cat_demo_dual_income_map))/nrow(myCut) # 50%
+# NAs. Single income vs dual income could be interesting -- probably DONT
+# want to use map for this one, or at least change the names
+
+
+barplot(table(myCut$cat_ta_total_identified_assets_map),
+        las=2, main="Total Assests")
+sum(is.na(myCut$cat_ta_total_identified_assets_map))/nrow(myCut) # 33%
+# Not a ton of variation, but intuitively this could be a good variable, so
+# consider further
+
+
+barplot(table(myCut$cat_ta_wealth_segments_map),
+        las=2, main="Wealth Segments")
+sum(is.na(myCut$cat_ta_wealth_segments_map))/nrow(myCut) # 5%
+# Nothing special
+
+
+
+myCut2 = myCut %>% select(-c("val_pop_family_income_state_decile", 
+"val_pop_home_value_state_index", "cat_score_donor_persona_map",
+"cat_score_direct_marketing_ask_array", "val_score_direct_marketing_score_map",
+"val_score_telemarketing_score_map", "val_score_online_score_map",
+"val_score_sustainer_score_map", "val_score_giving_tuesday_score_map",
+"val_score_end_of_year_score_map", "val_score_p2p_event_score_map", 
+"val_score_p2p_diy_score_map", "cat_score_p2p_persona", "cat_demo_gender_map",
+"cat_demo_marital_status_map", "cat_demo_person_type_map", 
+"cat_demo_dwelling_size_map", "cat_financial_mortgage_remainder_amount_map",
+"cat_financial_estimated_income_range_map", "cat_demo_occupation_map",
+"cat_demo_education_map", "cat_calc_political_persona_map",
+"cat_calc_social_score_map", "cat_ta_total_identified_assets_map",
+"cat_ta_wealth_segments_map", "cat_demo_dual_income_map", 
+"val_score_philanthropic_score_map"))
+
+
+md.pattern(myCut2 %>% select(-"cat_score_donor_persona"))
+
+# Removing cat_score_donor_persona makes NAs effectively clear, we can just omit other rows.
+# Question is, do we impute?
+
+
+corr_simple <- function(data,sig){
+  
+  df_cor <- data %>% mutate_if(is.character, as.factor)
+  df_cor <- df_cor %>% mutate_if(is.factor, as.numeric)
+  df_cor <- df_cor %>% mutate_if(is.integer, as.numeric)
+  corr <- cor(df_cor, use="pairwise.complete.obs")
+  corr[lower.tri(corr,diag=TRUE)] <- NA 
+  corr[corr == 1] <- NA 
+  corr <- as.data.frame(as.table(corr))
+  corr <- na.omit(corr) 
+  corr <- subset(corr, abs(Freq) > sig) 
+  corr <- corr[order(-abs(corr$Freq)),] 
+  print(corr)
+}
+
+corTab = corr_simple(myCut2, 0.7)
+
+# Philanthropic score correlated highly with end of year score and p2p event 
+# score. 
+# Going to get rid the other two, with the understanding that they are different 
+# and if phil score ends up being good, we can look deeper into those
+
+myCut2 = myCut2 %>% select(-c("val_score_end_of_year_score", 
+                              "val_score_p2p_event_score"))
+
+
+
+# Per capita income --> ispsa index
+# family income cbsa decile --> home val cbsa 
+# per capita income --> home value
+# ispsa index --> family income decile
+# per capita income --> income cbsa decile
+# ispsa index --> home val
+
+# Get rid of all but 3 or 2? We'll wait for donating data and see which is 
+# highest correlated
+
+
+plot(as.integer(as.numeric(myCut2$cat_score_donor_persona)), 
+     as.numeric(as.integer(myCut2$val_score_online_score)))
+
+ggplot(myCut2, aes(x=cat_score_donor_persona, 
+                   y=val_score_online_score))+
+  stat_summary_bin(fun='mean', geom='bar', bins=20) 
+
+
+ggplot(myCut2, aes(x=cat_score_donor_persona, 
+                   y=val_score_online_score)) + geom_point(position="jitter")
+
+
+# social score, cat_demo_political_affiliation
+
+myCut2 = cbind(myCut2, 
+          cat_demo_political_affiliation=adv_sub$cat_demo_political_affiliation,
+          cat_calc_social_score=adv_sub$cat_calc_social_score)
+
+# -----------
+# impute
+
+tempData = mice(myCut2, m=5, maxit=1, meth='pmm', seed=20)
+summary(tempData)
+
+completedData = complete(tempData, 3)
+
+xyplot(tempData, amt_lifetime_giving~val_score_online_score+
+         val_score_philanthropic_score, pch=18, cex=1)
+
+densityplot(tempData)
+
+# modelFit1 = with(tempData, kmeans(centers=6)) don't know how to do with
+# clustering yet
+
+# ----------------------
+
+kept = names(myCut2)
+
+#"amt_pop_per_capita_income"         "val_pop_ispsa_index"              
+# "val_pop_family_income_cbsa_decile" "val_pop_home_value_cbsa_index"    
+# "val_score_philanthropic_score"     "cat_score_donor_persona"          
+# "val_score_direct_marketing_score"  "val_score_telemarketing_score"    
+# "val_score_online_score"            "val_score_sustainer_score"        
+# "val_score_giving_tuesday_score"    "val_score_end_of_year_score"      
+# "val_score_p2p_event_score"         "val_score_p2p_diy_score"          
+# "cat_score_p2p_persona_map"         "amt_lifetime_giving" 
+
+testSet = subRelRmv %>% select(all_of(kept))
+
 
