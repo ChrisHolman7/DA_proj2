@@ -58,6 +58,10 @@ subRelRmv$HomePostCode = as.factor(subRelRmv$HomePostCode)
 subRelRmv$val_pop_family_income_cbsa_decile = 
   as.factor(subRelRmv$val_pop_family_income_cbsa_decile)
 
+subRelRmv$amt_lifetime_giving_log = log(subRelRmv$amt_lifetime_giving+1)
+
+
+
 length(unique(subRelRmv$HomePostCode))
 
 
@@ -342,7 +346,8 @@ myCut2 = myCut %>% select(-c("val_pop_family_income_state_decile",
 "cat_demo_education_map", "cat_calc_political_persona_map",
 "cat_calc_social_score_map", "cat_ta_total_identified_assets_map",
 "cat_ta_wealth_segments_map", "cat_demo_dual_income_map", 
-"val_score_philanthropic_score_map"))
+"val_score_philanthropic_score_map", 'amt_lifetime_giving',
+"amt_pop_per_capita_income", "val_pop_ispsa_index", "val_pop_home_value_cbsa_index"))
 
 
 md.pattern(myCut2 %>% select(-"cat_score_donor_persona"))
@@ -385,8 +390,17 @@ myCut2 = myCut2 %>% select(-c("val_score_end_of_year_score",
 # per capita income --> income cbsa decile
 # ispsa index --> home val
 
+# per capita income cor with ltg: 0.21
+# family income decile: 0.19
+# ispsa index: 0.2
+# home val:0.18
+
 # Get rid of all but 3 or 2? We'll wait for donating data and see which is 
 # highest correlated
+
+myCut2 = myCut2 %>% select(-"val_score_giving_tuesday_score")
+
+
 
 
 plot(as.integer(as.numeric(myCut2$cat_score_donor_persona)), 
@@ -434,7 +448,7 @@ kept = names(myCut2)
 # "val_score_online_score"            "val_score_sustainer_score"        
 # "val_score_giving_tuesday_score"    "val_score_end_of_year_score"      
 # "val_score_p2p_event_score"         "val_score_p2p_diy_score"          
-# "cat_score_p2p_persona_map"         "amt_lifetime_giving" 
+# "cat_score_p2p_persona_map"         "amt_lifetime_giving_log" 
 
 testSet = subRelRmv %>% select(all_of(kept))
 
